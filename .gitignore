@@ -1,0 +1,15 @@
+# Sensitive configuration
+BookStore.API/appsettings.json
+BookStore.API/appsettings.Development.json
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# Build output
+**/bin/
+**/obj/
+
+# Test results
+**/TestResults/
