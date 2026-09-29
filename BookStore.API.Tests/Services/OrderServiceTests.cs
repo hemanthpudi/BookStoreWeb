@@ -402,5 +402,144 @@ namespace BookStore.API.Tests.Services
             result.Should().NotBeNull();
             result.Should().BeEmpty();
         }
+
+        [Fact]
+        public async Task UpdateOrderStatusAsync_WhenOrderDoesNotExist_ShouldThrowKeyNotFoundException()
+        {
+            // Arrange
+            var orderId = 1;
+
+            _unitOfWorkMock
+                .Setup(x => x.Orders.GetOrderByIdAsync(orderId))
+                .ReturnsAsync((Order?)null);
+
+            // Act
+            Func<Task> act = async () =>
+                await _orderService.UpdateOrderStatusAsync(
+                    orderId,
+                    OrderStatus.Confirmed);
+
+            // Assert
+            await act.Should()
+                .ThrowAsync<KeyNotFoundException>()
+                .WithMessage("Order not found");
+        }
+
+        [Fact]
+        public async Task UpdateOrderStatusAsync_WhenNewStatusIsSameAsCurrentStatus_ShouldThrowInvalidOperationException()
+        {
+            // Arrange
+            var orderId = 1;
+
+            var order = new Order
+            {
+                Id = orderId,
+                UserId = "user-1",
+                Status = OrderStatus.Pending,
+                TotalAmount = 900,
+                OrderDate = DateTime.UtcNow,
+                OrderItems = new List<OrderItem>()
+            };
+
+            _unitOfWorkMock
+                .Setup(x => x.Orders.GetOrderByIdAsync(orderId))
+                .ReturnsAsync(order);
+
+            // Act
+            Func<Task> act = async () =>
+                await _orderService.UpdateOrderStatusAsync(
+                    orderId,
+                    OrderStatus.Pending);
+
+            // Assert
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage("Order is already in Pending status.");
+        }
+
+        [Fact]
+        public async Task UpdateOrderStatusAsync_WhenTransitionIsValid_ShouldUpdateStatus()
+        {
+            // Arrange
+            var orderId = 1;
+
+            var order = new Order
+            {
+                Id = orderId,
+                UserId = "user-1",
+                Status = OrderStatus.Pending,
+                TotalAmount = 900,
+                OrderDate = DateTime.UtcNow,
+                OrderItems = new List<OrderItem>()
+            };
+
+            _unitOfWorkMock
+                .Setup(x => x.Orders.GetOrderByIdAsync(orderId))
+                .ReturnsAsync(order);
+
+            _unitOfWorkMock
+                .Setup(x => x.Orders.UpdateOrder(
+                    It.IsAny<Order>()));
+
+            _unitOfWorkMock
+                .Setup(x => x.SaveChangesAsync())
+                .Returns(Task.CompletedTask);
+
+            // Act
+            var result = await _orderService.UpdateOrderStatusAsync(
+                orderId,
+                OrderStatus.Confirmed);
+
+            // Assert
+            result.Should().NotBeNull();
+            result.Id.Should().Be(orderId);
+            result.Status.Should().Be(OrderStatus.Confirmed.ToString());
+
+            order.Status.Should().Be(OrderStatus.Confirmed);
+
+            _unitOfWorkMock.Verify(
+                x => x.Orders.UpdateOrder(
+                    It.Is<Order>(o =>
+                        o.Id == orderId &&
+                        o.Status == OrderStatus.Confirmed)),
+                Times.Once);
+
+            _unitOfWorkMock.Verify(
+                x => x.SaveChangesAsync(),
+                Times.Once);
+        }
+
+        [Fact]
+        public async Task UpdateOrderStatusAsync_WhenTransitionIsInvalid_ShouldThrowInvalidOperationException()
+        {
+            // Arrange
+            var orderId = 1;
+
+            var order = new Order
+            {
+                Id = orderId,
+                UserId = "user-1",
+                Status = OrderStatus.Pending,
+                TotalAmount = 900,
+                OrderDate = DateTime.UtcNow,
+                OrderItems = new List<OrderItem>()
+            };
+
+            _unitOfWorkMock
+                .Setup(x => x.Orders.GetOrderByIdAsync(orderId))
+                .ReturnsAsync(order);
+
+            // Act
+            Func<Task> act = async () =>
+                await _orderService.UpdateOrderStatusAsync(
+                    orderId,
+                    OrderStatus.Delivered);
+
+            // Assert
+            await act.Should()
+                .ThrowAsync<InvalidOperationException>()
+                .WithMessage(
+                    "Cannot change the order status from Pending to Delivered");
+        }
     }
 }
